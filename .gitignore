@@ -44,3 +44,7 @@ wheels/
 # Virtual environments
 .venv
 .pytest_cache
+
+# docs
+/dashboard_graphs_plan.md
+/dataset_and_backend_v2.md
