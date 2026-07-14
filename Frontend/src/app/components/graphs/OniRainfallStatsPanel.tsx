@@ -11,9 +11,8 @@ import { StateSensitivityHeatmap } from "../stats/StateSensitivityHeatmap";
 export function OniRainfallStatsPanel({ className }: { className?: string }) {
   const { state, selectRegion } = useFilters();
   const [view, setView] = useState<"scatter" | "heatmap">("scatter");
-  const ALL_INDIA = "All India";
-  const regionId = state.selectedRegionId ?? null;
-  const resolvedName = regionId ? (STATE_NAME_BY_ID[regionId] ?? regionId) : ALL_INDIA;
+  const regionId = state.selectedRegionId ?? "mp";
+  const resolvedName = STATE_NAME_BY_ID[regionId] ?? regionId;
 
   return (
     <PanelCard

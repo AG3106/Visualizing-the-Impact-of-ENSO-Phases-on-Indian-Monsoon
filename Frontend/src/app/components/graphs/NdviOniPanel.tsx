@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   CartesianGrid,
   Cell,
@@ -10,6 +10,10 @@ import {
   XAxis,
   YAxis,
   ZAxis,
+  ComposedChart,
+  Line,
+  Legend,
+  Brush,
 } from "recharts";
 import { REGION_GROUPS } from "../../data/constants";
 import { YEAR_MIN, YEAR_MAX } from "../../data/constants";
@@ -66,6 +70,7 @@ function NdviScatterTip({
 
 export function NdviOniPanel({ className }: { className?: string }) {
   const [groupId, setGroupId] = useState("S");
+  const [viewType, setViewType] = useState<"scatter" | "dual">("scatter");
 
   const ALL_INDIA = "ALL";
   const isNational = groupId === ALL_INDIA;
@@ -73,6 +78,8 @@ export function NdviOniPanel({ className }: { className?: string }) {
   let regionLabel =
     REGION_GROUPS.find((g) => g.id === groupId)?.label?.toLowerCase() ?? "south";
   if (regionLabel === "east & ne") regionLabel = "east";
+
+  const [brushIdx, setBrushIdx] = useState<[number, number]>([0, 0]);
 
   const { data: rawData, loading, error, refetch } = useApiData<
     ApiNdviRegional,
@@ -92,6 +99,14 @@ export function NdviOniPanel({ className }: { className?: string }) {
       })),
     deps: [groupId],
   });
+
+  useEffect(() => {
+    if (rawData && rawData.length > 0) {
+      // 5 years out of roughly 25 years (2000-2024) is about 1/5th of the data
+      const windowSize = Math.floor(rawData.length / 5);
+      setBrushIdx([Math.max(0, rawData.length - windowSize), rawData.length - 1]);
+    }
+  }, [rawData]);
 
   const stats = useMemo(() => {
     if (!rawData || rawData.length < 3) return null;
@@ -119,15 +134,26 @@ export function NdviOniPanel({ className }: { className?: string }) {
       title="NDVI vs ONI"
       info="Scatter of kharif-season NDVI against the concurrent ONI index. Each dot is one 16-day composite. The red line is the OLS fit; dots are coloured by ENSO phase."
       actions={
-        <ViewSelect
-          value={groupId}
-          onChange={setGroupId}
-          width={140}
-          options={[
-            { value: ALL_INDIA, label: "All India" },
-            ...REGION_GROUPS.map((g) => ({ value: g.id, label: g.label })),
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          <ViewSelect
+            value={viewType}
+            onChange={(v) => setViewType(v as "scatter" | "dual")}
+            width={120}
+            options={[
+              { value: "scatter", label: "Scatter Plot" },
+              { value: "dual", label: "Dual Axis" },
+            ]}
+          />
+          <ViewSelect
+            value={groupId}
+            onChange={setGroupId}
+            width={140}
+            options={[
+              { value: ALL_INDIA, label: "All India" },
+              ...REGION_GROUPS.map((g) => ({ value: g.id, label: g.label })),
+            ]}
+          />
+        </div>
       }
       bodyClassName="flex flex-col"
     >
@@ -145,50 +171,122 @@ export function NdviOniPanel({ className }: { className?: string }) {
           )}
           <ChartBox>
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 8, right: 10, bottom: 4, left: -12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis
-                  type="number"
-                  dataKey="x"
-                  name="ONI"
-                  domain={[-2.5, 2.5]}
-                  tick={{ fontSize: 9 }}
-                  stroke="var(--muted-foreground)"
-                />
-                <YAxis
-                  type="number"
-                  dataKey="y"
-                  name="NDVI"
-                  domain={["auto", "auto"]}
-                  tick={{ fontSize: 9 }}
-                  width={38}
-                  stroke="var(--muted-foreground)"
-                />
-                <ZAxis type="number" dataKey="z" range={[14, 68]} />
-                <Tooltip content={<NdviScatterTip />} cursor={{ strokeDasharray: "3 3" }} />
-                <ReferenceLine x={0} stroke="var(--muted-foreground)" strokeWidth={1} />
+              {viewType === "scatter" ? (
+                <ScatterChart margin={{ top: 8, right: 10, bottom: 4, left: -12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis
+                    type="number"
+                    dataKey="x"
+                    name="ONI"
+                    domain={[-2.5, 2.5]}
+                    tick={{ fontSize: 9 }}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <YAxis
+                    type="number"
+                    dataKey="y"
+                    name="NDVI"
+                    domain={["auto", "auto"]}
+                    tick={{ fontSize: 9 }}
+                    width={38}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <ZAxis type="number" dataKey="z" range={[14, 68]} />
+                  <Tooltip content={<NdviScatterTip />} cursor={{ strokeDasharray: "3 3" }} />
+                  <ReferenceLine x={0} stroke="var(--muted-foreground)" strokeWidth={1} />
 
-                {/* OLS regression line */}
-                {stats && (
-                  <Scatter
-                    data={stats.line}
-                    line={{ stroke: "var(--destructive)", strokeWidth: 2 }}
-                    shape={() => <g />}
+                  {/* OLS regression line */}
+                  {stats && (
+                    <Scatter
+                      data={stats.line}
+                      line={{ stroke: "var(--destructive)", strokeWidth: 2 }}
+                      shape={() => <g />}
+                      isAnimationActive={false}
+                    />
+                  )}
+
+                  {/* Data points coloured by ENSO phase */}
+                  <Scatter data={rawData} isAnimationActive={false}>
+                    {rawData.map((d, i) => (
+                      <Cell
+                        key={i}
+                        fill={phaseColor(d.phase)}
+                        fillOpacity={0.75}
+                      />
+                    ))}
+                  </Scatter>
+                </ScatterChart>
+              ) : (
+                <ComposedChart data={rawData} margin={{ top: 8, right: 10, bottom: 4, left: -12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis 
+                    dataKey="date" 
+                    tickFormatter={(val) => val.slice(0, 4)}
+                    tick={{ fontSize: 9 }}
+                    stroke="var(--muted-foreground)"
+                    minTickGap={20}
+                  />
+                  <YAxis
+                    yAxisId="ndvi"
+                    type="number"
+                    domain={["auto", "auto"]}
+                    tick={{ fontSize: 9 }}
+                    width={38}
+                    stroke="var(--primary)"
+                  />
+                  <YAxis
+                    yAxisId="oni"
+                    type="number"
+                    orientation="right"
+                    domain={[-2.5, 2.5]}
+                    tick={{ fontSize: 9 }}
+                    width={30}
+                    stroke="var(--destructive)"
+                  />
+                  <Tooltip
+                    contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8 }}
+                    itemStyle={{ fontSize: 12 }}
+                    labelStyle={{ fontSize: 12, fontWeight: 600, color: "var(--foreground)", marginBottom: 4 }}
+                    labelFormatter={(val) => val.slice(0, 7)}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <ReferenceLine yAxisId="oni" y={0} stroke="var(--muted-foreground)" strokeWidth={1} strokeDasharray="3 3" />
+                  <Line
+                    yAxisId="ndvi"
+                    type="monotone"
+                    dataKey="y"
+                    name="NDVI"
+                    stroke="var(--primary)"
+                    strokeWidth={2}
+                    dot={false}
                     isAnimationActive={false}
                   />
-                )}
-
-                {/* Data points coloured by ENSO phase */}
-                <Scatter data={rawData} isAnimationActive={false}>
-                  {rawData.map((d, i) => (
-                    <Cell
-                      key={i}
-                      fill={phaseColor(d.phase)}
-                      fillOpacity={0.75}
-                    />
-                  ))}
-                </Scatter>
-              </ScatterChart>
+                  <Line
+                    yAxisId="oni"
+                    type="step"
+                    dataKey="x"
+                    name="ONI"
+                    stroke="var(--destructive)"
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  <Brush
+                    dataKey="date"
+                    height={16}
+                    travellerWidth={8}
+                    startIndex={brushIdx[0]}
+                    endIndex={brushIdx[1]}
+                    stroke="var(--primary)"
+                    fill="var(--muted)"
+                    onChange={(r: any) => {
+                      if (r.startIndex != null && r.endIndex != null) {
+                        setBrushIdx([r.startIndex, r.endIndex]);
+                      }
+                    }}
+                  />
+                </ComposedChart>
+              )}
             </ResponsiveContainer>
           </ChartBox>
         </div>

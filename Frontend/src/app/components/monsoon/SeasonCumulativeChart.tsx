@@ -38,9 +38,8 @@ interface SeasonCumulativeChartProps {
 
 export function SeasonCumulativeChart({ year, compareYear }: SeasonCumulativeChartProps) {
   const { state } = useFilters();
-  const ALL_INDIA = "All India";
-  const regionId = state.selectedRegionId ?? null;
-  const name = regionId ? (STATE_NAME_BY_ID[regionId] ?? regionId) : ALL_INDIA;
+  const regionId = state.selectedRegionId ?? "mp";
+  const name = STATE_NAME_BY_ID[regionId] ?? regionId;
 
   const { data: dataA, loading: loadA, error: errA } = useApiData<ApiRainfallCumulative, CumRow[]>({
     apiFn: () => fetchRainfallCumulative(name, year),

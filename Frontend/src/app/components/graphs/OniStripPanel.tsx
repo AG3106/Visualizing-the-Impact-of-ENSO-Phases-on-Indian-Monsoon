@@ -37,7 +37,7 @@ export function OniStripPanel({ className }: { className?: string }) {
   return (
     <PanelCard
       className={className}
-      title="G2 · ONI Timeline — ENSO Phase History"
+      title="ONI Timeline — ENSO Phase History"
       info="Diverging area chart of the Oceanic Niño Index (2000–2024). Drag the brush handles to select any time window — the Phase Distribution and Seasonal Intensity panels update live to reflect your selection."
       actions={
         <span className="text-muted-foreground hidden text-xs lg:inline">{rangeLabel}</span>
